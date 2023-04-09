@@ -240,6 +240,7 @@ class webInterface():
         self.max_doas_list         = []
         self.doa_confidences       = []
         self.compass_offset         = dsp_settings.get("compass_offset", 0)
+        self.module_signal_processor.compass_offset = self.compass_offset
         self.daq_dsp_latency       = 0 # [ms]
         self.max_amplitude         = 0 # Used to help setting the threshold level of the squelch
         self.avg_powers            = []
@@ -1687,6 +1688,7 @@ def settings_change_watcher():
         webInterface_inst.module_signal_processor.active_vfos = int(dsp_settings.get("active_vfos", 0))
         webInterface_inst.module_signal_processor.output_vfo = int(dsp_settings.get("output_vfo", 0))
         webInterface_inst.compass_offset = dsp_settings.get("compass_offset", 0)
+        webInterface_inst.module_signal_processor.compass_offset = webInterface_inst.compass_offset
         webInterface_inst.module_signal_processor.optimize_short_bursts = dsp_settings.get("en_optimize_short_bursts", 0)
         webInterface_inst.module_signal_processor.en_peak_hold = dsp_settings.get("en_peak_hold", 0)
 
@@ -2552,6 +2554,7 @@ def update_dsp_params(update_freq, en_doa, doa_decorrelation_method, spacing_met
     webInterface_inst._doa_fig_type = doa_fig_type
     webInterface_inst.module_signal_processor.doa_measure = doa_fig_type
     webInterface_inst.compass_offset = compass_offset
+    webInterface_inst.module_signal_processor.compass_offset = compass_offset
     webInterface_inst.module_signal_processor.ula_direction = ula_direction
     webInterface_inst.module_signal_processor.array_offset = array_offset
 
