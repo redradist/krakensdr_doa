@@ -52,6 +52,7 @@ from pyargus import directionEstimation as de
 from signal_utils import fm_demod, write_wav
 import copy
 from pathlib import Path
+import traceback
 
 # Make gpsd an optional component
 try:
@@ -85,9 +86,8 @@ class SignalProcessor(threading.Thread):
         self.data_que = data_que
         self.en_spectrum = False
         self.en_record = False
-        self.wav_record_path = None
-        self.en_iq_files = False
-        self.iq_record_path = None
+        self.wav_record_path = f"{self.root_path}/records/fm"
+        self.iq_record_path = f"{self.root_path}/records/iq"
         self.en_DOA_estimation = True
         self.doa_measure = 'Linear'
         self.compass_offset = 0.0
@@ -138,10 +138,9 @@ class SignalProcessor(threading.Thread):
         self.vfo_default_iq = 'False'
         self.vfo_iq = ['Default'] * self.max_vfos
 
-        self.en_fm_demod = False
-        self.vfo_fm_demod = [False] * self.max_vfos
-        self.fm_demod_channels = [None] * self.max_vfos
-        self.fm_demod_channels_thetas = [[]] * self.max_vfos
+        self.vfo_demod_channel = [None] * self.max_vfos
+        self.vfo_theta_channel = [[]] * self.max_vfos
+        self.vfo_iq_channel = [None] * self.max_vfos
 
         self.active_vfos = 1
         self.output_vfo = 0
@@ -185,26 +184,23 @@ class SignalProcessor(threading.Thread):
         self.write_interval = 1
         self.last_write_time = [0] * self.max_vfos
 
-    # @property
-    # def demod_type(self):
-    #     for i in range(len(self._view_demod_type)):
-    #         demod = self._demod_type[i]
-    #         if demod == 'Default':
-    #             self._view_demod_type[i] = self.vfo_default_demod
-    #         else:
-    #             self._view_demod_type[i] = demod
-    #         print(f"def demod_type(self): i = {i}, demod = {demod}, self._demod_type[i] = {self._demod_type[i]}, self._view_demod_type[i] = {self._view_demod_type[i]}, default_demod_type = {self.vfo_default_demod}")
-    #     return self._view_demod_type
-    #
-    # @property
-    # def iq_channel(self):
-    #     for i in range(len(self._iq_channel)):
-    #         iq_channel = self._iq_channel[i]
-    #         if iq_channel == 'None' and self.vfo_default_iq != 'None':
-    #             self._iq_channel[i] = self.vfo_default_iq
-    #         else:
-    #             self._iq_channel[i] = iq_channel
-    #     return self._iq_channel
+    @property
+    def vfo_demod_modes(self):
+        vfo_demod = [self.vfo_default_demod] * self.max_vfos
+        for i in range(len(self.vfo_demod)):
+            demod = self.vfo_demod[i]
+            if demod != 'Default':
+                vfo_demod[i] = demod
+        return vfo_demod
+
+    @property
+    def vfo_iq_enabled(self):
+        vfo_iq = [True if self.vfo_default_iq == "True" else False] * self.max_vfos
+        for i in range(len(self.vfo_iq)):
+            demod = self.vfo_iq[i]
+            if demod != 'Default':
+                vfo_iq[i] = True if demod == "True" else False
+        return vfo_iq
 
     def resetPeakHold(self):
         if self.spectrum_fig_type == 'Single':
@@ -401,18 +397,18 @@ class SignalProcessor(threading.Thread):
                                     vfo_channel = channelize(self.processed_signal, freq, decimation_factor, sampling_freq)
                                     iq_channel = vfo_channel[1]
 
-                                    if self.en_fm_demod:
+                                    if self.vfo_demod_modes[i] == 'FM':
                                         fm_demod_channel = fm_demod(iq_channel, decimate_sampling_freq, self.vfo_bw[i])
-                                        if self.fm_demod_channels[i] is not None:
-                                            self.fm_demod_channels[i] = np.concatenate((self.fm_demod_channels[i], fm_demod_channel))
+                                        if self.vfo_demod_channel[i] is not None:
+                                            self.vfo_demod_channel[i] = np.concatenate((self.vfo_demod_channel[i], fm_demod_channel))
                                         else:
-                                            self.fm_demod_channels[i] = fm_demod_channel
+                                            self.vfo_demod_channel[i] = fm_demod_channel
 
-                                    if self.en_iq_files:
-                                        if self.iq_channel[i] is not None:
-                                            self.iq_channel[i] = np.concatenate((self.iq_channel[i], iq_channel))
+                                    if self.vfo_iq_enabled[i]:
+                                        if self.vfo_iq_channel[i] is not None:
+                                            self.vfo_iq_channel[i] = np.concatenate((self.vfo_iq_channel[i], iq_channel))
                                         else:
-                                            self.iq_channel[i] = iq_channel
+                                            self.vfo_iq_channel[i] = iq_channel
 
                                     ########################## Method to check IQ diffs when noise source forced ON
                                     # iq_diffs = calc_sync(self.processed_signal)
@@ -434,9 +430,9 @@ class SignalProcessor(threading.Thread):
                                     confidence_str = "{:.2f}".format(np.max(conf_val))
                                     max_power_level_str = "{:.1f}".format((np.maximum(-100, max_amplitude)))
 
-                                    if self.en_fm_demod:
-                                        if theta_0 not in self.fm_demod_channels_thetas[i]:
-                                            self.fm_demod_channels_thetas[i].append(theta_0)
+                                    if self.vfo_demod_modes[i] or self.vfo_iq_enabled[i]:
+                                        if theta_0 not in self.vfo_theta_channel[i]:
+                                            self.vfo_theta_channel[i].append(theta_0)
 
                                     theta_0_list.append(theta_0)
                                     DOA_str_list.append(DOA_str)
@@ -445,20 +441,20 @@ class SignalProcessor(threading.Thread):
                                     freq_list.append(write_freq)
                                     doa_result_log_list.append(doa_result_log)
                                 else:
-                                    fm_demod_iq_channel = self.iq_channel[i]
-                                    fm_demod_channel = self.fm_demod_channels[i]
-                                    thetas = self.fm_demod_channels_thetas[i]
+                                    fm_demod_channel = self.vfo_demod_channel[i]
+                                    iq_channel = self.vfo_iq_channel[i]
+                                    thetas = self.vfo_theta_channel[i]
                                     record_file_name = None
                                     if fm_demod_channel is not None:
                                         vfo_freq = int(self.vfo_freq[i])
                                         record_file_name = f"{now_str},FM_{vfo_freq/1e6:.3f}MHz"
                                     fm_demod_channel_list.append((record_file_name,
-                                                                  fm_demod_iq_channel,
                                                                   fm_demod_channel,
+                                                                  iq_channel,
                                                                   thetas))
-                                    self.fm_demod_channels[i] = None
-                                    self.fm_demod_channels_thetas[i] = []
-                                    self.iq_channel[i] = None
+                                    self.vfo_demod_channel[i] = None
+                                    self.vfo_theta_channel[i] = []
+                                    self.vfo_iq_channel[i] = None
 
                             que_data_packet.append(['doa_thetas', self.DOA_theta])
                             que_data_packet.append(['DoA Result', doa_result_log])
@@ -466,38 +462,40 @@ class SignalProcessor(threading.Thread):
                             que_data_packet.append(['DoA Confidence', conf_val])
                             que_data_packet.append(['DoA Squelch', update_list])
 
-                            if self.en_record:
-                                def adjust_theta(theta):
-                                    if self.doa_measure == 'Polar':
-                                        return theta
-                                    elif self.doa_measure == 'Compass':
-                                        return (360 - theta + self.compass_offset) % 360
+                            def adjust_theta(theta):
+                                if self.doa_measure == 'Polar':
+                                    return theta
+                                elif self.doa_measure == 'Compass':
+                                    return (360 - theta + self.compass_offset) % 360
 
-                                def average_thetas(thetas):
-                                    avg_theta = sum(thetas) / len(thetas)
-                                    diff_thetas = copy.copy(thetas)
-                                    for i in range(len(diff_thetas)):
-                                        diff_thetas[i] = abs(diff_thetas[i] - avg_theta)
+                            def average_thetas(thetas):
+                                avg_theta = sum(thetas) / len(thetas)
+                                diff_thetas = copy.copy(thetas)
+                                for i in range(len(diff_thetas)):
+                                    diff_thetas[i] = abs(diff_thetas[i] - avg_theta)
 
-                                    return avg_theta, max(diff_thetas)
+                                return avg_theta, max(diff_thetas)
 
-                                for file_name, demod_iq_channel, demod_channel, thetas in fm_demod_channel_list:
-                                    avg_theta, max_diff_theta = average_thetas(thetas)
-                                    if max_diff_theta > 10:
-                                        doa_max_str = []
-                                        for theta in thetas:
-                                            doa_max_str.append(f"{adjust_theta(theta):.1f}")
-                                        doa_max_str = '_'.join(doa_max_str)
-                                    else:
-                                        doa_max_str = f"{adjust_theta(avg_theta):.1f}"
+                            for file_name, fm_demod_channel, iq_channel, thetas in fm_demod_channel_list:
+                                if fm_demod_channel is None and iq_channel is None:
+                                    continue
+                                avg_theta, max_diff_theta = average_thetas(thetas)
+                                if max_diff_theta > 10:
+                                    doa_max_str = []
+                                    for theta in thetas:
+                                        doa_max_str.append(f"{adjust_theta(theta):.1f}")
+                                    doa_max_str = '_'.join(doa_max_str)
+                                else:
+                                    doa_max_str = f"{adjust_theta(avg_theta):.1f}"
 
+                                if fm_demod_channel is not None:
                                     Path(f"{self.wav_record_path}/").mkdir(parents=True, exist_ok=True)
                                     write_wav(f"{self.wav_record_path}/{file_name},DOA_{doa_max_str}.wav",
                                               48_000,
-                                              demod_channel)
-                                    if self.en_iq_files:
-                                        Path(f"{self.iq_record_path}").mkdir(parents=True, exist_ok=True)
-                                        demod_iq_channel.tofile(f"{self.iq_record_path}/{file_name},DOA_{doa_max_str}.iq")
+                                              fm_demod_channel)
+                                if iq_channel is not None:
+                                    Path(f"{self.iq_record_path}").mkdir(parents=True, exist_ok=True)
+                                    iq_channel.tofile(f"{self.iq_record_path}/{file_name},DOA_{doa_max_str}.iq")
 
                             # Do Kraken App first as currently its the only one supporting multi-vfo out
                             if self.DOA_data_format == "Kraken App" or self.en_data_record or \
@@ -648,7 +646,8 @@ class SignalProcessor(threading.Thread):
 
                             if self.hasgps and self.usegps:
                                 self.update_location()
-                    except:
+                    except Exception as ex:
+                        self.logger.error(traceback.format_exc())
                         self.data_ready = False
 
                     # -----> SPECTRUM PROCESSING <-----
@@ -656,12 +655,6 @@ class SignalProcessor(threading.Thread):
                         spectrum_plot_data = reduce_spectrum(self.spectrum, self.spectrum_plot_size,
                                                              self.channel_number)
                         que_data_packet.append(['spectrum', spectrum_plot_data])
-
-                    # Record IQ samples
-                    if self.en_record:
-                        # TODO: Implement IQ frame recording
-                        self.logger.error(
-                            "Saving IQ samples to npy is obsolete, IQ Frame saving is currently not implemented")
 
                 stop_time = time.time()
                 que_data_packet.append(['update_rate', stop_time - start_time])
