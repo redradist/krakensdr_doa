@@ -189,6 +189,8 @@ class webInterface():
         # VFO Configuration
         self.module_signal_processor.spectrum_fig_type = dsp_settings.get("spectrum_calculation", "Single")
         self.module_signal_processor.vfo_mode = dsp_settings.get("vfo_mode", 'Standard')
+        self.module_signal_processor.vfo_default_demod = dsp_settings.get("vfo_default_demod", 'None')
+        self.module_signal_processor.vfo_default_iq = dsp_settings.get("vfo_default_iq", 'False')
         self.module_signal_processor.dsp_decimation = int(dsp_settings.get("dsp_decimation", 0))
         self.module_signal_processor.active_vfos = int(dsp_settings.get("active_vfos", 0))
         self.module_signal_processor.output_vfo = int(dsp_settings.get("output_vfo", 0))
@@ -200,6 +202,8 @@ class webInterface():
             self.module_signal_processor.vfo_bw[i] = int(dsp_settings.get("vfo_bw_" + str(i), 0))
             self.module_signal_processor.vfo_freq[i] = float(dsp_settings.get("vfo_freq_" + str(i), 0))
             self.module_signal_processor.vfo_squelch[i] = int(dsp_settings.get("vfo_squelch_" + str(i), 0))
+            self.module_signal_processor.vfo_demod[i] = dsp_settings.get("vfo_demod_" + str(i), 'Default')
+            self.module_signal_processor.vfo_iq[i] = dsp_settings.get("vfo_iq_" + str(i), 'Default')
 
         # DAQ Subsystem status parameters
         self.daq_conn_status       = 0
@@ -269,6 +273,8 @@ class webInterface():
         self.vfo_cfg_inputs = []
         self.vfo_cfg_inputs.append(Input(component_id ="spectrum_fig_type", component_property="value"))
         self.vfo_cfg_inputs.append(Input(component_id ="vfo_mode", component_property="value"))
+        self.vfo_cfg_inputs.append(Input(component_id ="vfo_default_demod", component_property="value"))
+        self.vfo_cfg_inputs.append(Input(component_id ="vfo_default_iq", component_property="value"))
         self.vfo_cfg_inputs.append(Input(component_id ="dsp_decimation", component_property="value"))
         self.vfo_cfg_inputs.append(Input(component_id ="active_vfos", component_property="value"))
         self.vfo_cfg_inputs.append(Input(component_id ="output_vfo", component_property="value"))
@@ -278,6 +284,8 @@ class webInterface():
             self.vfo_cfg_inputs.append(Input(component_id ="vfo_"+str(i)+"_bw", component_property="value"))
             self.vfo_cfg_inputs.append(Input(component_id ="vfo_"+str(i)+"_freq", component_property="value"))
             self.vfo_cfg_inputs.append(Input(component_id ="vfo_"+str(i)+"_squelch", component_property="value"))
+            self.vfo_cfg_inputs.append(Input(component_id ="vfo_"+str(i)+"_demod", component_property="value"))
+            self.vfo_cfg_inputs.append(Input(component_id ="vfo_"+str(i)+"_iq", component_property="value"))
 
     def save_configuration(self):
         data = {}
@@ -324,6 +332,8 @@ class webInterface():
         # VFO Information
         data["spectrum_calculation"] = self.module_signal_processor.spectrum_fig_type
         data["vfo_mode"] = self.module_signal_processor.vfo_mode
+        data["vfo_default_demod"] = self.module_signal_processor.vfo_default_demod
+        data["vfo_default_iq"] = self.module_signal_processor.vfo_default_iq
         data["dsp_decimation"] = self.module_signal_processor.dsp_decimation
         data["active_vfos"] = self.module_signal_processor.active_vfos
         data["output_vfo"] = self.module_signal_processor.output_vfo
@@ -333,6 +343,8 @@ class webInterface():
             data["vfo_bw_" + str(i)] = self.module_signal_processor.vfo_bw[i]
             data["vfo_freq_" + str(i)] = self.module_signal_processor.vfo_freq[i]
             data["vfo_squelch_" + str(i)] = self.module_signal_processor.vfo_squelch[i]
+            data["vfo_demod_" + str(i)] = self.module_signal_processor.vfo_demod[i]
+            data["vfo_iq_" + str(i)] = self.module_signal_processor.vfo_iq[i]
 
         with open(settings_file_path, 'w') as outfile:
             json.dump(data, outfile, indent=2)
@@ -1285,6 +1297,34 @@ def generate_config_page_layout(webInterface_inst):
         ], className="field"),
 
         html.Div([
+            html.Div("VFO Default Demod:",
+                     id="label_vfo_default_demod",
+                     className="field-label"),
+            dcc.Dropdown(id='vfo_default_demod',
+                         options=[
+                             {'label': 'None', 'value': 'None'},
+                             {'label': 'FM', 'value': 'FM'},
+                         ],
+                         value=webInterface_inst.module_signal_processor.vfo_default_demod,
+                         style={"display": "inline-block"},
+                         className="field-body"),
+        ], className="field"),
+
+        html.Div([
+            html.Div("VFO Default IQ Channel:",
+                     id="label_vfo_default_iq",
+                     className="field-label"),
+            dcc.Dropdown(id='vfo_default_iq',
+                         options=[
+                             {'label': 'False', 'value': 'False'},
+                             {'label': 'True', 'value': 'True'},
+                         ],
+                         value=webInterface_inst.module_signal_processor.vfo_default_iq,
+                         style={"display": "inline-block"},
+                         className="field-body"),
+        ], className="field"),
+
+        html.Div([
         html.Div("Active VFOs:", id="label_active_vfos", className="field-label"),
         dcc.Dropdown(id='active_vfos',
                 options=[
@@ -1369,8 +1409,34 @@ def generate_config_page_layout(webInterface_inst):
                     html.Div("VFO-" + str(i) + " Squelch [dB] :", className="field-label"),
                     dcc.Input(id='vfo_' +str(i) + '_squelch', value=webInterface_inst.module_signal_processor.vfo_squelch[i], type='number', debounce=True, className="field-body-textbox")
                 ], className="field"),
-        ], id="vfo"+str(i), className="card", style = {'display': 'block'} if i < webInterface_inst.module_signal_processor.active_vfos else {'display': 'none'} )
-        
+
+            html.Div([
+                html.Div("VFO-" + str(i) + " Demod:", className="field-label"),
+                dcc.Dropdown(id=f'vfo_{i}_demod',
+                             options=[
+                                 {'label': f'Default ({webInterface_inst.module_signal_processor.vfo_default_demod})',
+                                  'value': 'Default'},
+                                 {'label': 'None', 'value': 'None'},
+                                 {'label': 'FM', 'value': 'FM'},
+                             ],
+                             value=webInterface_inst.module_signal_processor.vfo_demod[i],
+                             style={"display": "inline-block"}, className="field-body"),
+                ], className="field"),
+
+            html.Div([
+                html.Div("VFO-" + str(i) + " IQ Channel:", className="field-label"),
+                dcc.Dropdown(id=f'vfo_{i}_iq',
+                             options=[
+                                 {'label': f'Default ({webInterface_inst.module_signal_processor.vfo_default_iq})',
+                                  'value': 'Default'},
+                                 {'label': 'False', 'value': 'False'},
+                                 {'label': 'True', 'value': 'True'},
+                             ],
+                             value=webInterface_inst.module_signal_processor.vfo_iq[i],
+                             style={"display": "inline-block"}, className="field-body"),
+            ], className="field"),
+        ], id="vfo"+str(i), className="card", style={'display': 'block'} if i < webInterface_inst.module_signal_processor.active_vfos else {'display': 'none'} )
+
         
         
     system_control_card = \
@@ -1614,6 +1680,8 @@ def settings_change_watcher():
         # VFO Configuration
         webInterface_inst.module_signal_processor.spectrum_fig_type = dsp_settings.get("spectrum_calculation", "Single")
         webInterface_inst.module_signal_processor.vfo_mode = dsp_settings.get("vfo_mode", 'Standard')
+        webInterface_inst.module_signal_processor.vfo_default_demod = dsp_settings.get("vfo_default_demod", 'None')
+        webInterface_inst.module_signal_processor.vfo_default_iq = dsp_settings.get("vfo_default_iq", 'False')
         webInterface_inst.module_signal_processor.dsp_decimation = int(dsp_settings.get("dsp_decimation", 0))
         webInterface_inst.module_signal_processor.active_vfos = int(dsp_settings.get("active_vfos", 0))
         webInterface_inst.module_signal_processor.output_vfo = int(dsp_settings.get("output_vfo", 0))
@@ -1625,6 +1693,8 @@ def settings_change_watcher():
             webInterface_inst.module_signal_processor.vfo_bw[i] = int(dsp_settings.get("vfo_bw_" + str(i), 0))
             webInterface_inst.module_signal_processor.vfo_freq[i] = float(dsp_settings.get("vfo_freq_" + str(i), 0))
             webInterface_inst.module_signal_processor.vfo_squelch[i] = int(dsp_settings.get("vfo_squelch_" + str(i), 0))
+            webInterface_inst.module_signal_processor.vfo_demod[i] = dsp_settings.get("vfo_demod_" + str(i), 'Default')
+            webInterface_inst.module_signal_processor.vfo_iq[i] = dsp_settings.get("vfo_iq_" + str(i), 'Default')
 
 
         webInterface_inst.module_signal_processor.DOA_algorithm = dsp_settings.get("doa_method", "MUSIC")
@@ -1995,6 +2065,8 @@ def update_vfo_params(*args):
 
     webInterface_inst.module_signal_processor.spectrum_fig_type = kwargs_dict["spectrum_fig_type"]
     webInterface_inst.module_signal_processor.vfo_mode = kwargs_dict["vfo_mode"]
+    webInterface_inst.module_signal_processor.vfo_default_demod = kwargs_dict["vfo_default_demod"]
+    webInterface_inst.module_signal_processor.vfo_default_iq = kwargs_dict["vfo_default_iq"]
 
     active_vfos = kwargs_dict["active_vfos"]
     # If VFO mode is in the VFO-0 Auto Max mode, we active VFOs to 1 only
@@ -2033,6 +2105,8 @@ def update_vfo_params(*args):
             webInterface_inst.module_signal_processor.vfo_bw[i] = int(min(kwargs_dict['vfo_'+str(i)+'_bw'], bw * 10**6))
             webInterface_inst.module_signal_processor.vfo_freq[i] = int(max(min(kwargs_dict['vfo_'+str(i)+'_freq'], vfo_max), vfo_min) * 10**6)
             webInterface_inst.module_signal_processor.vfo_squelch[i] = int(kwargs_dict['vfo_'+str(i)+'_squelch'])
+            webInterface_inst.module_signal_processor.vfo_demod[i] = kwargs_dict[f'vfo_{i}_demod']
+            webInterface_inst.module_signal_processor.vfo_iq[i] = kwargs_dict[f'vfo_{i}_iq']
 
 @app.callback([Output("page-content"   , "children"),
               Output("header_config"  ,"className"),

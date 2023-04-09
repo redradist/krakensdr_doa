@@ -133,12 +133,15 @@ class SignalProcessor(threading.Thread):
         self.vfo_bw = [12500] * self.max_vfos
         self.vfo_freq = [self.module_receiver.daq_center_freq] * self.max_vfos
         self.vfo_squelch = [-120] * self.max_vfos
+        self.vfo_default_demod = 'None'
+        self.vfo_demod = ['Default'] * self.max_vfos
+        self.vfo_default_iq = 'False'
+        self.vfo_iq = ['Default'] * self.max_vfos
 
         self.en_fm_demod = False
         self.vfo_fm_demod = [False] * self.max_vfos
         self.fm_demod_channels = [None] * self.max_vfos
         self.fm_demod_channels_thetas = [[]] * self.max_vfos
-        self.iq_channels = [None] * self.max_vfos
 
         self.active_vfos = 1
         self.output_vfo = 0
@@ -181,6 +184,27 @@ class SignalProcessor(threading.Thread):
         self.en_data_record = False
         self.write_interval = 1
         self.last_write_time = [0] * self.max_vfos
+
+    # @property
+    # def demod_type(self):
+    #     for i in range(len(self._view_demod_type)):
+    #         demod = self._demod_type[i]
+    #         if demod == 'Default':
+    #             self._view_demod_type[i] = self.vfo_default_demod
+    #         else:
+    #             self._view_demod_type[i] = demod
+    #         print(f"def demod_type(self): i = {i}, demod = {demod}, self._demod_type[i] = {self._demod_type[i]}, self._view_demod_type[i] = {self._view_demod_type[i]}, default_demod_type = {self.vfo_default_demod}")
+    #     return self._view_demod_type
+    #
+    # @property
+    # def iq_channel(self):
+    #     for i in range(len(self._iq_channel)):
+    #         iq_channel = self._iq_channel[i]
+    #         if iq_channel == 'None' and self.vfo_default_iq != 'None':
+    #             self._iq_channel[i] = self.vfo_default_iq
+    #         else:
+    #             self._iq_channel[i] = iq_channel
+    #     return self._iq_channel
 
     def resetPeakHold(self):
         if self.spectrum_fig_type == 'Single':
@@ -373,7 +397,7 @@ class SignalProcessor(threading.Thread):
                                     decimation_factor = 50
                                     decimate_sampling_freq = int(sampling_freq / decimation_factor)
                                     assert decimate_sampling_freq == 48_000
-                                    
+
                                     vfo_channel = channelize(self.processed_signal, freq, decimation_factor, sampling_freq)
                                     iq_channel = vfo_channel[1]
 
@@ -385,10 +409,10 @@ class SignalProcessor(threading.Thread):
                                             self.fm_demod_channels[i] = fm_demod_channel
 
                                     if self.en_iq_files:
-                                        if self.iq_channels[i] is not None:
-                                            self.iq_channels[i] = np.concatenate((self.iq_channels[i], iq_channel))
+                                        if self.iq_channel[i] is not None:
+                                            self.iq_channel[i] = np.concatenate((self.iq_channel[i], iq_channel))
                                         else:
-                                            self.iq_channels[i] = iq_channel
+                                            self.iq_channel[i] = iq_channel
 
                                     ########################## Method to check IQ diffs when noise source forced ON
                                     # iq_diffs = calc_sync(self.processed_signal)
@@ -421,7 +445,7 @@ class SignalProcessor(threading.Thread):
                                     freq_list.append(write_freq)
                                     doa_result_log_list.append(doa_result_log)
                                 else:
-                                    fm_demod_iq_channel = self.iq_channels[i]
+                                    fm_demod_iq_channel = self.iq_channel[i]
                                     fm_demod_channel = self.fm_demod_channels[i]
                                     thetas = self.fm_demod_channels_thetas[i]
                                     record_file_name = None
@@ -434,7 +458,7 @@ class SignalProcessor(threading.Thread):
                                                                   thetas))
                                     self.fm_demod_channels[i] = None
                                     self.fm_demod_channels_thetas[i] = []
-                                    self.iq_channels[i] = None
+                                    self.iq_channel[i] = None
 
                             que_data_packet.append(['doa_thetas', self.DOA_theta])
                             que_data_packet.append(['DoA Result', doa_result_log])
