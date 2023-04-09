@@ -390,9 +390,10 @@ class SignalProcessor(threading.Thread):
                                 if self.en_DOA_estimation and self.channel_number > 1 and max_amplitude > self.vfo_squelch[i] and (i == self.output_vfo or self.output_vfo < 0):
                                     write_freq = int(self.vfo_freq[i])
                                     # Do channelization
-                                    decimation_factor = 50
-                                    decimate_sampling_freq = int(sampling_freq / decimation_factor)
-                                    assert decimate_sampling_freq == 48_000
+                                    if self.vfo_demod_modes[i] == 'FM':
+                                        decimation_factor = 50
+                                        decimate_sampling_freq = int(sampling_freq / decimation_factor)
+                                        assert decimate_sampling_freq == 48_000
 
                                     vfo_channel = channelize(self.processed_signal, freq, decimation_factor, sampling_freq)
                                     iq_channel = vfo_channel[1]
